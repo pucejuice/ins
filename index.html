@@ -1,0 +1,1751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Inspection Record</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Ubuntu', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #2d3748 0%, #000000 100%);
+            min-height: 100vh;
+            padding: 10px;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2d3748 0%, #000000 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 15px;
+        }
+
+        .project-info {
+            background: rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .project-info-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .project-info-label {
+            font-size: 13px;
+            font-weight: bold;
+            width: 100px;
+            text-align: right;
+            margin-right: 10px;
+            opacity: 0.9;
+        }
+
+        .project-info-input {
+            flex: 1;
+            font-size: 14px;
+            padding: 4px 8px;
+            border: 1px solid rgba(255,255,255,0.5);
+            border-radius: 6px;
+            background: rgba(255,255,255,0.9);
+            color: #333;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .stat {
+            text-align: center;
+            flex: 1;
+        }
+
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+
+        .content-section {
+            padding: 20px;
+        }
+
+        .question-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .question-card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 15px;
+            border-left: 4px solid #4a5568;
+            transition: all 0.3s;
+        }
+
+        .question-card.completed {
+            border-left-color: #28a745;
+            background: #e8f5e9;
+        }
+
+        .question-card.non-compliant {
+            border-left-color: #dc3545;
+            background: #ffebee;
+        }
+
+        .question-card.na {
+            border-left-color: #6c757d;
+            background: #e9ecef;
+            opacity: 0.7;
+        }
+
+        .question-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 10px;
+        }
+
+        .question-number {
+            background: #4a5568;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        .question-text {
+            font-size: 15px;
+            font-weight: 500;
+            color: #333;
+            flex: 1;
+            margin-left: 10px;
+        }
+
+        .question-controls {
+            margin-top: 12px;
+        }
+
+        .response-buttons {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .response-btn {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            background: white;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .response-btn:hover {
+            border-color: #4a5568;
+        }
+
+        .response-btn.selected {
+            background: #4a5568;
+            color: white;
+            border-color: #4a5568;
+        }
+
+        .response-btn.yes.selected {
+            background: #28a745;
+            border-color: #28a745;
+        }
+
+        .response-btn.no.selected {
+            background: #dc3545;
+            border-color: #dc3545;
+        }
+
+        .response-btn.na.selected {
+            background: #6c757d;
+            border-color: #6c757d;
+        }
+
+        .multi-select-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .multi-select-option {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .multi-select-option:hover {
+            border-color: #4a5568;
+        }
+
+        .multi-select-option.selected {
+            background: #e3f2fd;
+            border-color: #2196F3;
+        }
+
+        .multi-select-option input[type="checkbox"] {
+            margin-right: 10px;
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .photo-section {
+            margin-top: 10px;
+        }
+
+        .photo-required-badge {
+            display: inline-block;
+            background: #ffc107;
+            color: #000;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .photo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .photo-thumbnail {
+            position: relative;
+            aspect-ratio: 1;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .photo-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .photo-thumbnail .remove-photo {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            background: rgba(220, 53, 69, 0.9);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .add-photo-btn {
+            width: 100%;
+            padding: 10px;
+            background: #4a5568;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .add-photo-btn svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .notes-input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: 'Ubuntu', sans-serif;
+            resize: vertical;
+            min-height: 60px;
+            margin-top: 10px;
+        }
+
+        .notes-input:focus {
+            outline: none;
+            border-color: #4a5568;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            padding: 20px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .action-btn {
+            flex: 1;
+            padding: 15px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .action-btn:active {
+            transform: scale(0.98);
+        }
+
+        .action-btn.export {
+            background: #28a745;
+            color: white;
+        }
+
+        .action-btn.clear {
+            background: #dc3545;
+            color: white;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 10000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal img {
+            max-width: 90%;
+            max-height: 90%;
+            border-radius: 12px;
+        }
+
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .loading-overlay.active {
+            display: flex;
+        }
+
+        .loading-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4a5568;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            z-index: 10001;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+
+        #photoInput, #freeFormPhotoInput {
+            display: none;
+        }
+
+        .add-section {
+            padding: 0;
+            margin-bottom: 20px;
+        }
+
+        .camera-button {
+            width: 100%;
+            padding: 15px;
+            background: #4a5568;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: transform 0.2s;
+        }
+
+        .camera-button:active {
+            transform: scale(0.98);
+        }
+
+        .camera-button svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        .form-section {
+            display: none;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .form-section.active {
+            display: block;
+        }
+
+        .preview-img {
+            width: 100%;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .input-group input, .input-group textarea, .input-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: 'Ubuntu', sans-serif;
+            transition: border-color 0.3s;
+            background-color: white;
+        }
+
+        .input-group input:focus, .input-group textarea:focus, .input-group select:focus {
+            outline: none;
+            border-color: #4a5568;
+        }
+
+        .input-group textarea {
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        .input-group select {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 36px;
+        }
+
+        .save-button, .cancel-button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .save-button {
+            background: #28a745;
+            color: white;
+        }
+
+        .cancel-button {
+            background: #dc3545;
+            color: white;
+        }
+
+        .save-button:active, .cancel-button:active {
+            transform: scale(0.98);
+        }
+
+        .items-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .item-card {
+            background: white;
+            border-radius: 12px;
+            padding: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-left: 5px solid #9E9E9E;
+        }
+
+        .item-card.major {
+            border-left-color: #f44336;
+        }
+
+        .item-card.moderate {
+            border-left-color: #ff9800;
+        }
+
+        .item-card.minor {
+            border-left-color: #2196F3;
+        }
+
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .item-number {
+            background: #4a5568;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        .item-time {
+            color: #666;
+            font-size: 12px;
+        }
+
+        .item-image {
+            width: 100%;
+            border-radius: 8px;
+            margin: 10px 0;
+            cursor: pointer;
+        }
+
+        .item-field {
+            background: #f9f9f9;
+            padding: 10px;
+            border-radius: 6px;
+            margin: 8px 0;
+            border-left: 3px solid #4a5568;
+        }
+
+        .item-field strong {
+            color: #4a5568;
+            display: block;
+            margin-bottom: 4px;
+            font-size: 13px;
+        }
+
+        .item-field p {
+            color: #333;
+            font-size: 14px;
+            margin: 0;
+        }
+
+        .item-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .delete-button {
+            padding: 8px 16px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .edit-button {
+            padding: 8px 16px;
+            background: #4a5568;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .show-map-btn {
+            width: 100%;
+            padding: 15px;
+            background: #4a5568;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 20px;
+            transition: transform 0.2s;
+        }
+
+        .show-map-btn:active {
+            transform: scale(0.98);
+        }
+
+        #map {
+            height: 400px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            background: #fff;
+        }
+
+        .progress-summary {
+            background: rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 13px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #28a745;
+            transition: width 0.3s;
+        }
+
+        .storage-summary {
+            background: rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 13px;
+        }
+
+        .storage-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        .storage-fill {
+            height: 100%;
+            background: #2196F3;
+            transition: width 0.3s, background 0.3s;
+        }
+
+        .storage-fill.warning {
+            background: #ff9800;
+        }
+
+        .storage-fill.danger {
+            background: #f44336;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Inspection Record</h1>
+            <div class="project-info">
+                <div class="project-info-row">
+                    <span class="project-info-label">Project:</span>
+                    <input type="text" id="projectNumber" class="project-info-input" value="Project_Number">
+                </div>
+                <div class="project-info-row">
+                    <span class="project-info-label">Address:</span>
+                    <input type="text" id="projectAddress" class="project-info-input" value="Project_Address_Line_1">
+                </div>
+                <div class="project-info-row">
+                    <span class="project-info-label">Inspector:</span>
+                    <input type="text" id="inspectorName" class="project-info-input" value="Project_Owner">
+                </div>
+                <div class="project-info-row">
+                    <span class="project-info-label">Date:</span>
+                    <input type="date" id="inspectionDate" class="project-info-input" value="Doc_Date">
+                </div>
+                <div class="project-info-row">
+                    <span class="project-info-label">Purpose:</span>
+                    <input type="text" id="inspectionPurpose" class="project-info-input" placeholder="e.g. Frame Inspection, Final Inspection">
+                </div>
+            </div>
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-number" id="statItems">0</div>
+                    <div class="stat-label">Items</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="statMajor" style="color: #f44336;">0</div>
+                    <div class="stat-label">Major</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="statModerate" style="color: #ff9800;">0</div>
+                    <div class="stat-label">Moderate</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="statMinor" style="color: #2196F3;">0</div>
+                    <div class="stat-label">Minor</div>
+                </div>
+            </div>
+            <div class="storage-summary">
+                <div>Storage: <span id="storageText">0 KB / 5 MB</span></div>
+                <div class="storage-bar">
+                    <div class="storage-fill" id="storageBar"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-section">
+            <div class="add-section">
+                <button class="camera-button" onclick="captureNewPhoto()">
+                    <svg fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z"/>
+                        <path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/>
+                    </svg>
+                    Add Inspection Item
+                </button>
+            </div>
+
+            <div class="form-section" id="photoFormSection">
+                <img id="previewImg" class="preview-img" style="display: none;">
+                
+                <div class="input-group">
+                    <label for="categoryInput">Category</label>
+                    <select id="categoryInput">
+                        <option value="Observation/Info">Observation/Info</option>
+                        <option value="Minor Defect (Monitor)">Minor Defect (Monitor)</option>
+						<option value="Moderate Defect (Repair)">Moderate Defect (Repair)</option>
+						<option value="Major Defect (Urgent)">Major Defect (Urgent)</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label for="descriptionInput">Description</label>
+                    <textarea id="descriptionInput" placeholder="What did you observe?"></textarea>
+                </div>
+
+                <div class="input-group">
+                    <label for="notesInput">Comments/Notes (Rectification)</label>
+                    <textarea id="notesInput" placeholder="Additional notes or rectification required..."></textarea>
+                </div>
+
+                <div style="display: flex; gap: 10px;">
+                    <button class="save-button" onclick="savePhotoItem()">Save Item</button>
+                    <button class="cancel-button" onclick="cancelPhotoCapture()">Cancel</button>
+                </div>
+            </div>
+
+            <div class="items-list" id="itemsList">
+                <!-- Items will be rendered here -->
+            </div>
+        </div>
+
+        <!-- MAP SECTION -->
+        <div class="content-section" style="border-top: 2px solid #e0e0e0;">
+            <button class="show-map-btn" onclick="showMap()">📍 Show All Locations on Map</button>
+            <div id="map" style="display: none;"></div>
+        </div>
+
+        <div class="action-buttons">
+            <button class="action-btn export" onclick="exportReport()">
+                Export PDF
+            </button>
+            <button class="action-btn clear" onclick="clearAll()">
+                Clear All
+            </button>
+        </div>
+    </div>
+
+    <input type="file" id="freeFormPhotoInput" accept="image/*" capture="environment">
+
+    <div class="modal" id="photoModal" onclick="closePhotoModal()">
+        <img id="modalImage" src="" alt="Full size photo">
+    </div>
+
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <div id="loadingText">Processing...</div>
+        </div>
+    </div>
+
+    <script>
+        // ===== DATA STORAGE =====
+        let freeFormItems = []; // Store photo inspection items
+        let currentPhotoData = null; // Temporary storage for current photo being captured
+        let editingItemIndex = null; // Track which item is being edited (null = new item)
+        let map = null; // Leaflet map instance
+        let markers = []; // Map markers
+
+        // Generate unique storage keys based on filename
+        function getStoragePrefix() {
+            // Get the filename from the URL or pathname
+            let filename = window.location.pathname.split('/').pop();
+            
+            // Remove file extension
+            filename = filename.replace(/\.[^/.]+$/, '');
+            
+            // If no filename (e.g., just "/"), use a default
+            if (!filename) {
+                filename = 'inspection_default';
+            }
+            
+            // Clean the filename to be safe for storage keys
+            filename = filename.replace(/[^a-zA-Z0-9_-]/g, '_');
+            
+            return filename;
+        }
+
+        const storagePrefix = getStoragePrefix();
+        const storageKeys = {
+            freeFormItems: `${storagePrefix}_items`,
+            projectData: `${storagePrefix}_project`
+        };
+
+        // ===== URL PARAMETER HANDLING =====
+        function getUrlParams() {
+            const params = new URLSearchParams(window.location.search);
+            return {
+                projectNumber: params.get('projectNumber') || params.get('project'),
+                projectAddress: params.get('projectAddress') || params.get('address'),
+                inspectorName: params.get('inspectorName') || params.get('inspector'),
+                inspectionPurpose: params.get('inspectionPurpose') || params.get('purpose'),
+                inspectionDate: params.get('inspectionDate') || params.get('date')
+            };
+        }
+
+        function applyUrlParams() {
+            const urlParams = getUrlParams();
+            
+            // Only apply URL params if they exist and the field is currently empty or default
+            if (urlParams.projectNumber) {
+                const field = document.getElementById('projectNumber');
+                if (!field.value || field.value === '234602') {
+                    field.value = urlParams.projectNumber;
+                }
+            }
+            
+            if (urlParams.projectAddress) {
+                const field = document.getElementById('projectAddress');
+                if (!field.value || field.value === '19 Millwell Road') {
+                    field.value = urlParams.projectAddress;
+                }
+            }
+            
+            if (urlParams.inspectorName) {
+                const field = document.getElementById('inspectorName');
+                if (!field.value || field.value === 'Daniel Kenna') {
+                    field.value = urlParams.inspectorName;
+                }
+            }
+            
+            if (urlParams.inspectionPurpose) {
+                const field = document.getElementById('inspectionPurpose');
+                if (!field.value) {
+                    field.value = urlParams.inspectionPurpose;
+                }
+            }
+            
+            if (urlParams.inspectionDate) {
+                const field = document.getElementById('inspectionDate');
+                // Validate date format (YYYY-MM-DD)
+                if (/^\d{4}-\d{2}-\d{2}$/.test(urlParams.inspectionDate)) {
+                    if (!field.value) {
+                        field.value = urlParams.inspectionDate;
+                    }
+                }
+            }
+        }
+
+        // ===== INITIALIZATION =====
+        function init() {
+            loadData();
+            applyUrlParams(); // Check for URL parameters after loading saved data
+            setTodayDate();
+            renderFreeFormItems();
+            updateStats();
+            setupFreeFormPhotoInput();
+            setupProjectDataSave();
+        }
+
+        function loadData() {
+            try {
+                freeFormItems = JSON.parse(localStorage.getItem(storageKeys.freeFormItems)) || [];
+                
+                const savedProjectData = JSON.parse(localStorage.getItem(storageKeys.projectData));
+                if (savedProjectData) {
+                    document.getElementById('projectNumber').value = savedProjectData.projectNumber || '';
+                    document.getElementById('projectAddress').value = savedProjectData.projectAddress || '';
+                    document.getElementById('inspectorName').value = savedProjectData.inspectorName || '';
+                    document.getElementById('inspectionDate').value = savedProjectData.inspectionDate || '';
+                    document.getElementById('inspectionPurpose').value = savedProjectData.inspectionPurpose || '';
+                }
+            } catch (e) {
+                console.error('Error loading data:', e);
+            }
+        }
+
+        function saveData() {
+            try {
+                localStorage.setItem(storageKeys.freeFormItems, JSON.stringify(freeFormItems));
+                saveProjectData();
+            } catch (e) {
+                console.error('Error saving data:', e);
+                showToast('Error saving data. Storage may be full.');
+            }
+        }
+
+        function saveProjectData() {
+            const projectData = {
+                projectNumber: document.getElementById('projectNumber').value,
+                projectAddress: document.getElementById('projectAddress').value,
+                inspectorName: document.getElementById('inspectorName').value,
+                inspectionDate: document.getElementById('inspectionDate').value,
+                inspectionPurpose: document.getElementById('inspectionPurpose').value
+            };
+            localStorage.setItem(storageKeys.projectData, JSON.stringify(projectData));
+        }
+
+        function setupProjectDataSave() {
+            ['projectNumber', 'projectAddress', 'inspectorName', 'inspectionDate', 'inspectionPurpose'].forEach(id => {
+                document.getElementById(id).addEventListener('change', saveProjectData);
+            });
+        }
+
+        function setTodayDate() {
+            const today = new Date().toISOString().split('T')[0];
+            const dateInput = document.getElementById('inspectionDate');
+            if (!dateInput.value) {
+                dateInput.value = today;
+            }
+        }
+
+        // ===== RENDER QUESTIONS =====
+        function openPhotoModal(photoData) {
+            document.getElementById('modalImage').src = photoData;
+            document.getElementById('photoModal').classList.add('active');
+        }
+
+        function closePhotoModal() {
+            document.getElementById('photoModal').classList.remove('active');
+        }
+
+        // ===== FREE-FORM PHOTO CAPTURE =====
+        function compressImage(dataURL, maxWidth, quality) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    if (width > maxWidth) {
+                        height = (maxWidth / width) * height;
+                        width = maxWidth;
+                    }
+                    
+                    canvas.width = width;
+                    canvas.height = height;
+                    
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    let compressedData = canvas.toDataURL('image/jpeg', quality);
+                    
+                    // If still too large, compress more aggressively
+                    if (compressedData.length > 300000 && quality > 0.3) {
+                        compressedData = canvas.toDataURL('image/jpeg', quality - 0.15);
+                    }
+                    
+                    // Final fallback for very large images
+                    if (compressedData.length > 300000 && quality > 0.2) {
+                        compressedData = canvas.toDataURL('image/jpeg', 0.3);
+                    }
+                    
+                    resolve(compressedData);
+                };
+                img.src = dataURL;
+            });
+        }
+
+        function setupFreeFormPhotoInput() {
+            document.getElementById('freeFormPhotoInput').addEventListener('change', handleFreeFormPhotoCapture);
+        }
+
+        function captureNewPhoto() {
+            document.getElementById('freeFormPhotoInput').click();
+        }
+
+        function handleFreeFormPhotoCapture(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            showLoading('Compressing image...');
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const originalData = e.target.result;
+                
+                // Compress image aggressively to maximize storage (800px max, 50% quality)
+                const compressedData = await compressImage(originalData, 800, 0.5);
+                
+                currentPhotoData = compressedData;
+                
+                // Show form with preview (use compressed for consistency)
+                document.getElementById('previewImg').src = compressedData;
+                document.getElementById('previewImg').style.display = 'block';
+                document.getElementById('photoFormSection').classList.add('active');
+                
+                // Clear previous inputs and set default category
+                document.getElementById('categoryInput').value = 'Observation/Info';
+                document.getElementById('descriptionInput').value = '';
+                document.getElementById('notesInput').value = '';
+                
+                // Get GPS location
+                getCurrentLocation();
+                
+                hideLoading();
+                
+                // Scroll to form
+                document.getElementById('photoFormSection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            };
+            reader.readAsDataURL(file);
+
+            // Reset input
+            event.target.value = '';
+        }
+
+        function getCurrentLocation() {
+            if ('geolocation' in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        // Store location temporarily for the current photo
+                        if (currentPhotoData) {
+                            window.tempLocation = {
+                                lat: position.coords.latitude,
+                                lng: position.coords.longitude,
+                                accuracy: position.coords.accuracy
+                            };
+                        }
+                    },
+                    function(error) {
+                        console.error('Location error:', error);
+                        window.tempLocation = null;
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            } else {
+                window.tempLocation = null;
+            }
+        }
+
+        function savePhotoItem() {
+            const category = document.getElementById('categoryInput').value || 'Observation/Info';
+            const description = document.getElementById('descriptionInput').value;
+            const notesValue = document.getElementById('notesInput').value;
+
+            if (!description) {
+                showToast('Please add a description');
+                return;
+            }
+
+            if (editingItemIndex !== null) {
+                // Editing existing item
+                freeFormItems[editingItemIndex].category = category;
+                freeFormItems[editingItemIndex].description = description;
+                freeFormItems[editingItemIndex].notes = notesValue;
+                
+                saveData();
+                
+                // Reset form
+                editingItemIndex = null;
+                currentPhotoData = null;
+                document.getElementById('photoFormSection').classList.remove('active');
+                document.getElementById('previewImg').style.display = 'none';
+                
+                renderFreeFormItems();
+                updateStats();
+                showToast('Item updated');
+            } else {
+                // Creating new item
+                if (!currentPhotoData) {
+                    showToast('No photo captured');
+                    return;
+                }
+
+                const item = {
+                    number: freeFormItems.length + 1,
+                    timestamp: new Date().toISOString(),
+                    image: currentPhotoData,
+                    category: category,
+                    description: description,
+                    notes: notesValue,
+                    location: window.tempLocation || null
+                };
+
+                freeFormItems.push(item);
+                saveData();
+                
+                // Reset form and temp location
+                currentPhotoData = null;
+                window.tempLocation = null;
+                document.getElementById('photoFormSection').classList.remove('active');
+                document.getElementById('previewImg').style.display = 'none';
+                
+                renderFreeFormItems();
+                updateStats();
+                showToast('Item saved');
+            }
+        }
+
+        function editItem(index) {
+            const item = freeFormItems[index];
+            if (!item) return;
+
+            editingItemIndex = index;
+            
+            // Show form with existing data
+            document.getElementById('previewImg').src = item.image;
+            document.getElementById('previewImg').style.display = 'block';
+            document.getElementById('photoFormSection').classList.add('active');
+            
+            // Populate form fields with existing values
+            document.getElementById('categoryInput').value = item.category;
+            document.getElementById('descriptionInput').value = item.description;
+            document.getElementById('notesInput').value = item.notes || '';
+            
+            // Scroll to form
+            document.getElementById('photoFormSection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            
+            showToast('Editing Item #' + item.number);
+        }
+
+        function cancelPhotoCapture() {
+            currentPhotoData = null;
+            editingItemIndex = null;
+            document.getElementById('photoFormSection').classList.remove('active');
+            document.getElementById('previewImg').style.display = 'none';
+        }
+
+        function renderFreeFormItems() {
+            const container = document.getElementById('itemsList');
+            if (freeFormItems.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            container.innerHTML = freeFormItems.map(item => {
+                let cardClass = 'item-card';
+                if (item.category === 'Major Defect (Urgent)') cardClass += ' major';
+                else if (item.category === 'Moderate Defect (Repair)') cardClass += ' moderate';
+                else if (item.category === 'Minor Defect (Monitor)') cardClass += ' minor';
+                // Observation/Info uses default gray border
+
+                return `
+                    <div class="${cardClass}">
+                        <div class="item-header">
+                            <span class="item-number">Item #${item.number}</span>
+                            <span class="item-time">${formatDateTime(item.timestamp)}</span>
+                        </div>
+                        ${item.image ? `<img src="${item.image}" class="item-image" onclick="openPhotoModal('${item.image}')">` : ''}
+                        <div class="item-field">
+                            <strong>Category:</strong>
+                            <p>${item.category}</p>
+                        </div>
+                        <div class="item-field">
+                            <strong>Description:</strong>
+                            <p>${item.description}</p>
+                        </div>
+                        ${item.notes ? `
+                            <div class="item-field">
+                                <strong>Comments/Notes:</strong>
+                                <p>${item.notes}</p>
+                            </div>
+                        ` : ''}
+                        ${item.location ? `
+                            <div class="item-field" style="font-size: 12px; color: #666;">
+                                📍 GPS: ${item.location.lat.toFixed(6)}, ${item.location.lng.toFixed(6)}
+                            </div>
+                        ` : ''}
+                        <div class="item-actions">
+                            <button class="edit-button" onclick="editItem(${item.number - 1})">Edit</button>
+                            <button class="delete-button" onclick="deleteFreeFormItem(${item.number - 1})">Delete</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function deleteFreeFormItem(index) {
+            if (confirm('Delete this observation?')) {
+                freeFormItems.splice(index, 1);
+                
+                // Renumber remaining items
+                freeFormItems.forEach((item, idx) => {
+                    item.number = idx + 1;
+                });
+                
+                saveData();
+                renderFreeFormItems();
+                updateStats();
+                showToast('Item deleted');
+            }
+        }
+
+        // ===== MAP FUNCTIONALITY =====
+        function showMap() {
+            const mapDiv = document.getElementById('map');
+            
+            if (mapDiv.style.display === 'none') {
+                mapDiv.style.display = 'block';
+                
+                if (!map) {
+                    map = L.map('map').setView([0, 0], 2);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© OpenStreetMap contributors'
+                    }).addTo(map);
+                }
+
+                // Clear existing markers
+                markers.forEach(marker => map.removeLayer(marker));
+                markers = [];
+
+                const bounds = [];
+                
+                // Add markers for free-form inspection items
+                freeFormItems.forEach(item => {
+                    if (item.location) {
+                        const marker = L.marker([item.location.lat, item.location.lng])
+                            .addTo(map)
+                            .bindPopup(`
+                                <strong>Item #${item.number}</strong><br>
+                                ${formatDateTime(item.timestamp)}<br>
+                                ${item.category ? 'Category: ' + escapeHtml(item.category) : ''}
+                                ${item.description ? '<br>Description: ' + escapeHtml(item.description) : ''}
+                            `);
+                        markers.push(marker);
+                        bounds.push([item.location.lat, item.location.lng]);
+                    }
+                });
+
+                if (bounds.length > 0) {
+                    setTimeout(() => {
+                        map.invalidateSize();
+                        map.fitBounds(bounds, { padding: [50, 50] });
+                    }, 100);
+                } else {
+                    setTimeout(() => {
+                        map.invalidateSize();
+                    }, 100);
+                }
+
+                document.querySelector('.show-map-btn').textContent = '📍 Hide Map';
+            } else {
+                mapDiv.style.display = 'none';
+                document.querySelector('.show-map-btn').textContent = '📍 Show All Locations on Map';
+            }
+        }
+
+        // ===== STATISTICS =====
+        function updateStats() {
+            const totalItems = freeFormItems.length;
+            const majorCount = freeFormItems.filter(i => i.category === 'Major Defect (Urgent)').length;
+            const moderateCount = freeFormItems.filter(i => i.category === 'Moderate Defect (Repair)').length;
+            const minorCount = freeFormItems.filter(i => i.category === 'Minor Defect (Monitor)').length;
+
+            document.getElementById('statItems').textContent = totalItems;
+            document.getElementById('statMajor').textContent = majorCount;
+            document.getElementById('statModerate').textContent = moderateCount;
+            document.getElementById('statMinor').textContent = minorCount;
+
+            // Update storage stats
+            updateStorageStats();
+        }
+
+        function updateStorageStats() {
+            // Calculate localStorage usage
+            let totalBytes = 0;
+            for (let key in localStorage) {
+                if (localStorage.hasOwnProperty(key)) {
+                    totalBytes += localStorage[key].length * 2; // UTF-16 = 2 bytes per char
+                }
+            }
+
+            // localStorage limit is typically 5MB (5,242,880 bytes)
+            const maxBytes = 5 * 1024 * 1024;
+            const usedKB = (totalBytes / 1024).toFixed(1);
+            const maxMB = (maxBytes / (1024 * 1024)).toFixed(0);
+            const usagePercent = (totalBytes / maxBytes) * 100;
+
+            // Update display
+            if (totalBytes > 1024 * 1024) {
+                const usedMB = (totalBytes / (1024 * 1024)).toFixed(2);
+                document.getElementById('storageText').textContent = `${usedMB} MB / ${maxMB} MB`;
+            } else {
+                document.getElementById('storageText').textContent = `${usedKB} KB / ${maxMB} MB`;
+            }
+
+            // Update bar
+            const storageBar = document.getElementById('storageBar');
+            storageBar.style.width = Math.min(usagePercent, 100) + '%';
+
+            // Update bar color based on usage
+            storageBar.classList.remove('warning', 'danger');
+            if (usagePercent > 90) {
+                storageBar.classList.add('danger');
+            } else if (usagePercent > 70) {
+                storageBar.classList.add('warning');
+            }
+        }
+
+        // ===== EXPORT REPORT =====
+        async function exportReport() {
+            showLoading('Generating PDF report...');
+
+            try {
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pageWidth = pdf.internal.pageSize.getWidth();
+                const pageHeight = pdf.internal.pageSize.getHeight();
+                const margin = 15;
+                const contentWidth = pageWidth - (margin * 2);
+                let yPos = margin;
+
+                // Category Colors for borders (RGB)
+                const categoryColors = {
+                    'Major Defect (Urgent)': [244, 67, 54],
+                    'Moderate Defect (Repair)': [255, 152, 0],
+                    'Minor Defect (Monitor)': [33, 150, 243],
+                    'Observation/Info': [158, 158, 158]
+                };
+
+                // Header
+                pdf.setFillColor(45, 55, 72);
+                pdf.rect(0, 0, pageWidth, 55, 'F');
+                pdf.setTextColor(255, 255, 255);
+                pdf.setFontSize(20);
+                pdf.setFont(undefined, 'bold');
+                pdf.text('Inspection Record', pageWidth / 2, 15, { align: 'center' });
+
+                // Project Info
+                pdf.setFontSize(10);
+                pdf.setFont(undefined, 'normal');
+                const inspectionPurpose = document.getElementById('inspectionPurpose').value;
+                const projectInfo = [
+                    `Project: ${document.getElementById('projectNumber').value}`,
+                    `Address: ${document.getElementById('projectAddress').value}`,
+                    `Inspector: ${document.getElementById('inspectorName').value}`,
+                    `Date: ${formatDate(document.getElementById('inspectionDate').value)}`,
+                    inspectionPurpose ? `Purpose: ${inspectionPurpose}` : ''
+                ].filter(info => info !== '');
+                
+                projectInfo.forEach((info, idx) => {
+                    pdf.text(info, pageWidth / 2, 25 + (idx * 5), { align: 'center' });
+                });
+
+                yPos = 65;
+
+                // Summary
+                pdf.setTextColor(0, 0, 0);
+                pdf.setFontSize(14);
+                pdf.setFont(undefined, 'bold');
+                pdf.text('Inspection Summary', margin, yPos);
+                yPos += 8;
+
+                const totalItems = freeFormItems.length;
+                const majorCount = freeFormItems.filter(i => i.category === 'Major Defect (Urgent)').length;
+                const moderateCount = freeFormItems.filter(i => i.category === 'Moderate Defect (Repair)').length;
+                const minorCount = freeFormItems.filter(i => i.category === 'Minor Defect (Monitor)').length;
+
+                pdf.setFontSize(10);
+                pdf.setFont(undefined, 'normal');
+                pdf.text(`Total Items: ${totalItems}`, margin, yPos);
+                yPos += 5;
+                pdf.text(`Major Defects: ${majorCount}`, margin, yPos);
+                yPos += 5;
+                pdf.text(`Moderate Defects: ${moderateCount}`, margin, yPos);
+                yPos += 5;
+                pdf.text(`Minor Defects: ${minorCount}`, margin, yPos);
+                yPos += 10;
+
+                // Inspection Items Section
+                if (freeFormItems.length > 0) {
+                    pdf.setFontSize(14);
+                    pdf.setFont(undefined, 'bold');
+                    pdf.text('Inspection Items', margin, yPos);
+                    yPos += 10;
+
+                    for (let i = 0; i < freeFormItems.length; i++) {
+                        const item = freeFormItems[i];
+
+                        // Calculate item height
+                        let itemHeight = 60; // Base with image
+                        if (item.notes) itemHeight += 15;
+                        if (item.location) itemHeight += 8;
+
+                        // Check if we need a new page
+                        if (yPos + itemHeight > pageHeight - margin) {
+                            pdf.addPage();
+                            yPos = margin;
+                        }
+
+                        // Determine border color based on category
+                        const borderColor = categoryColors[item.category] || categoryColors['Observation/Info'];
+
+                        // Item box background
+                        pdf.setFillColor(248, 249, 250);
+                        pdf.rect(margin, yPos, contentWidth, itemHeight, 'F');
+                        
+                        // Colored left border
+                        pdf.setFillColor(borderColor[0], borderColor[1], borderColor[2]);
+                        pdf.rect(margin, yPos, 3, itemHeight, 'F');
+
+                        // Item header
+                        pdf.setFontSize(11);
+                        pdf.setFont(undefined, 'bold');
+                        pdf.setTextColor(0, 0, 0);
+                        pdf.text(`Item #${item.number}`, margin + 5, yPos + 6);
+                        
+                        pdf.setFontSize(9);
+                        pdf.setFont(undefined, 'normal');
+                        pdf.setTextColor(100, 100, 100);
+                        pdf.text(formatDateTime(item.timestamp), contentWidth + margin - 40, yPos + 6);
+                        yPos += 10;
+
+                        let textX = margin + 5;
+                        let textWidth = contentWidth - 10;
+                        let currentY = yPos;
+
+                        // Add image
+                        if (item.image) {
+                            try {
+                                pdf.addImage(item.image, 'JPEG', margin + 5, yPos, 45, 45);
+                                textX = margin + 55;
+                                textWidth = contentWidth - 60;
+                            } catch (e) {
+                                console.error('Error adding image to PDF:', e);
+                            }
+                        }
+
+                        // Category
+                        pdf.setFontSize(10);
+                        pdf.setTextColor(0, 0, 0);
+                        pdf.setFont(undefined, 'bold');
+                        pdf.text(`Category:`, textX, currentY);
+                        pdf.setFont(undefined, 'normal');
+                        currentY += 5;
+                        pdf.text(item.category, textX, currentY);
+                        currentY += 7;
+
+                        // Description
+                        pdf.setFont(undefined, 'bold');
+                        pdf.text(`Description:`, textX, currentY);
+                        pdf.setFont(undefined, 'normal');
+                        currentY += 5;
+                        const descLines = pdf.splitTextToSize(item.description, textWidth);
+                        descLines.forEach(line => {
+                            if (currentY < yPos + 45) {
+                                pdf.text(line, textX, currentY);
+                                currentY += 5;
+                            }
+                        });
+                        currentY += 3;
+
+                        // Notes
+                        if (item.notes) {
+                            const notesY = Math.max(currentY, yPos + 50);
+                            pdf.setFont(undefined, 'italic');
+                            pdf.setFontSize(9);
+                            const notesLines = pdf.splitTextToSize(`Notes: ${item.notes}`, contentWidth - 10);
+                            pdf.text(notesLines, margin + 5, notesY);
+                        }
+
+                        // Location
+                        if (item.location) {
+                            const locY = yPos + itemHeight - 8;
+                            pdf.setFontSize(8);
+                            pdf.setTextColor(100, 100, 100);
+                            pdf.text(`📍 GPS: ${item.location.lat.toFixed(6)}, ${item.location.lng.toFixed(6)}`, margin + 5, locY);
+                            pdf.setTextColor(0, 0, 0);
+                        }
+
+                        yPos += itemHeight + 5;
+                    }
+                }
+
+                // Add map if there are locations
+                const hasLocations = freeFormItems.some(item => item.location);
+                if (hasLocations) {
+                    showLoading('Rendering map...');
+                    
+                    const mapDiv = document.getElementById('map');
+                    mapDiv.style.display = 'block';
+                    mapDiv.style.width = '800px';
+                    mapDiv.style.height = '600px';
+
+                    if (!map) {
+                        map = L.map('map').setView([0, 0], 2);
+                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                            attribution: '© OpenStreetMap contributors'
+                        }).addTo(map);
+                    }
+
+                    markers.forEach(marker => map.removeLayer(marker));
+                    markers = [];
+                    const bounds = [];
+                    
+                    freeFormItems.forEach(item => {
+                        if (item.location) {
+                            const marker = L.marker([item.location.lat, item.location.lng])
+                                .addTo(map)
+                                .bindPopup(`Item #${item.number}`);
+                            markers.push(marker);
+                            bounds.push([item.location.lat, item.location.lng]);
+                        }
+                    });
+                    
+                    map.invalidateSize();
+                    if (bounds.length > 0) {
+                        map.fitBounds(bounds, { padding: [50, 50] });
+                    }
+
+                    await new Promise(r => setTimeout(r, 1500));
+
+                    const canvas = await html2canvas(mapDiv, { useCORS: true, logging: false });
+                    const mapImageData = canvas.toDataURL('image/jpeg', 0.7);
+                    
+                    pdf.addPage();
+                    pdf.setFontSize(16);
+                    pdf.setTextColor(0, 0, 0);
+                    pdf.text('Photo Locations Map', pageWidth / 2, 20, { align: 'center' });
+                    pdf.addImage(mapImageData, 'JPEG', margin, 30, contentWidth, contentWidth * 0.75);
+
+                    mapDiv.style.display = 'none';
+                    mapDiv.style.width = 'auto';
+                    mapDiv.style.height = '400px';
+                }
+
+                // Footer
+                pdf.setFontSize(8);
+                pdf.setTextColor(128, 128, 128);
+                const pageCount = pdf.internal.getNumberOfPages();
+                for (let i = 1; i <= pageCount; i++) {
+                    pdf.setPage(i);
+                    pdf.text(`Page ${i} of ${pageCount} - Generated ${new Date().toLocaleString()}`, 
+                             pageWidth / 2, pageHeight - 10, { align: 'center' });
+                }
+
+                // Save PDF with new filename format: ProjectNumber-Inspection Record-YYMMDD
+                const projectNum = document.getElementById('projectNumber').value || 'Project';
+                const inspectionDateValue = document.getElementById('inspectionDate').value;
+                let dateStr = '';
+                if (inspectionDateValue) {
+                    const dateParts = inspectionDateValue.split('-'); // YYYY-MM-DD
+                    if (dateParts.length === 3) {
+                        dateStr = dateParts[0].slice(2) + dateParts[1] + dateParts[2]; // YYMMDD
+                    }
+                } else {
+                    const now = new Date();
+                    dateStr = now.toISOString().slice(2, 10).replace(/-/g, ''); // YYMMDD
+                }
+                const fileName = `${projectNum}-Inspection Record-${dateStr}.pdf`;
+                pdf.save(fileName);
+
+                hideLoading();
+                showToast('PDF report generated successfully');
+            } catch (error) {
+                console.error('Error generating PDF:', error);
+                hideLoading();
+                showToast('Error generating PDF');
+            }
+        }
+
+        // ===== CLEAR DATA =====
+        function clearAll() {
+            if (confirm('This will delete all inspection items and photos. Are you sure?')) {
+                freeFormItems = [];
+                
+                localStorage.removeItem(storageKeys.freeFormItems);
+                
+                renderFreeFormItems();
+                updateStats();
+                
+                // Clear map markers
+                if (map && markers.length > 0) {
+                    markers.forEach(marker => map.removeLayer(marker));
+                    markers = [];
+                }
+                
+                showToast('All data cleared');
+            }
+        }
+
+        // ===== UTILITY FUNCTIONS =====
+        function showLoading(text) {
+            document.getElementById('loadingText').textContent = text;
+            document.getElementById('loadingOverlay').classList.add('active');
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').classList.remove('active');
+        }
+
+        function showToast(message) {
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.remove();
+            }, 3000);
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        }
+
+        function formatDateTime(isoString) {
+            if (!isoString) return 'N/A';
+            const date = new Date(isoString);
+            return date.toLocaleString('en-AU', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Initialize on load
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
