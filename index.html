@@ -762,42 +762,33 @@
             <h1>Inspection Record</h1>
             <div class="project-info">
                 <div class="project-info-row">
-                    <span class="project-info-label">Project:</span>
-                    <input type="text" id="projectNumber" class="project-info-input" value="Project_Number">
+                    <span class="project-info-label">Project #:</span>
+                    <input type="text" id="projectNumber" class="project-info-input" value="234602">
                 </div>
                 <div class="project-info-row">
                     <span class="project-info-label">Address:</span>
-                    <input type="text" id="projectAddress" class="project-info-input" value="Project_Address_Line_1">
+                    <input type="text" id="projectAddress" class="project-info-input" value="19 Millwell Road">
                 </div>
                 <div class="project-info-row">
                     <span class="project-info-label">Inspector:</span>
-                    <input type="text" id="inspectorName" class="project-info-input" value="Project_Owner">
+                    <input type="text" id="inspectorName" class="project-info-input" value="Daniel Kenna">
                 </div>
                 <div class="project-info-row">
                     <span class="project-info-label">Date:</span>
-                    <input type="date" id="inspectionDate" class="project-info-input" value="Doc_Date">
+                    <input type="date" id="inspectionDate" class="project-info-input">
                 </div>
                 <div class="project-info-row">
                     <span class="project-info-label">Purpose:</span>
                     <input type="text" id="inspectionPurpose" class="project-info-input" placeholder="e.g. Frame Inspection, Final Inspection">
                 </div>
             </div>
-            <div class="stats">
-                <div class="stat">
-                    <div class="stat-number" id="statItems">0</div>
-                    <div class="stat-label">Items</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-number" id="statMajor" style="color: #f44336;">0</div>
-                    <div class="stat-label">Major</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-number" id="statModerate" style="color: #ff9800;">0</div>
-                    <div class="stat-label">Moderate</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-number" id="statMinor" style="color: #2196F3;">0</div>
-                    <div class="stat-label">Minor</div>
+            <div class="stats" id="statsContainer">
+                <!-- Stats will be dynamically generated based on whether questions exist -->
+            </div>
+            <div class="progress-summary" id="progressContainer" style="display: none;">
+                <div>Progress: <span id="progressText">0%</span></div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressBar"></div>
                 </div>
             </div>
             <div class="storage-summary">
@@ -808,7 +799,18 @@
             </div>
         </div>
 
-        <div class="content-section">
+        <div class="content-section" id="questionSection" style="display: none;">
+            <div class="question-list" id="questionList">
+                <!-- Questions will be dynamically generated -->
+            </div>
+        </div>
+
+        <!-- FREE-FORM PHOTO SECTION -->
+        <div class="content-section" id="freeFormSection">
+            <h3 style="margin-bottom: 15px; color: #4a5568;" id="freeFormTitle">Inspection Items</h3>
+            <p style="color: #666; font-size: 14px; margin-bottom: 15px;" id="freeFormDescription">
+                Capture photos and document observations, defects, and compliance items.
+            </p>
             <div class="add-section">
                 <button class="camera-button" onclick="captureNewPhoto()">
                     <svg fill="currentColor" viewBox="0 0 24 24">
@@ -849,7 +851,7 @@
             </div>
 
             <div class="items-list" id="itemsList">
-                <!-- Items will be rendered here -->
+                <!-- Free-form items will be rendered here -->
             </div>
         </div>
 
@@ -869,6 +871,7 @@
         </div>
     </div>
 
+    <input type="file" id="photoInput" accept="image/*" capture="environment" multiple>
     <input type="file" id="freeFormPhotoInput" accept="image/*" capture="environment">
 
     <div class="modal" id="photoModal" onclick="closePhotoModal()">
@@ -883,8 +886,18 @@
     </div>
 
     <script>
+        // ===== INSPECTION TEMPLATE =====
+        // Starts empty - can be loaded via URL parameters or left empty for free-form only
+        const inspectionTemplate = {
+            title: "Inspection Record",
+            questions: []
+        };
+
         // ===== DATA STORAGE =====
-        let freeFormItems = []; // Store photo inspection items
+        let responses = {};
+        let photos = {}; // Store photos per question: { questionId: [photoDataUrls] }
+        let notes = {}; // Store notes per question: { questionId: "note text" }
+        let freeFormItems = []; // Store free-form photo observations
         let currentPhotoData = null; // Temporary storage for current photo being captured
         let editingItemIndex = null; // Track which item is being edited (null = new item)
         let map = null; // Leaflet map instance
@@ -911,6 +924,9 @@
 
         const storagePrefix = getStoragePrefix();
         const storageKeys = {
+            responses: `${storagePrefix}_responses`,
+            photos: `${storagePrefix}_photos`,
+            notes: `${storagePrefix}_notes`,
             freeFormItems: `${storagePrefix}_items`,
             projectData: `${storagePrefix}_project`
         };
@@ -923,66 +939,114 @@
                 projectAddress: params.get('projectAddress') || params.get('address'),
                 inspectorName: params.get('inspectorName') || params.get('inspector'),
                 inspectionPurpose: params.get('inspectionPurpose') || params.get('purpose'),
-                inspectionDate: params.get('inspectionDate') || params.get('date')
+                inspectionDate: params.get('inspectionDate') || params.get('date'),
+                templateUrl: params.get('templateUrl') || params.get('template'),
+                questions: params.get('questions') || params.get('q')
             };
         }
 
-        function applyUrlParams() {
+        async function loadTemplateFromUrl(url) {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('Failed to load template');
+                const data = await response.json();
+                
+                // Validate and merge with default template
+                if (data.title) {
+                    inspectionTemplate.title = data.title;
+                }
+                if (data.questions && Array.isArray(data.questions)) {
+                    inspectionTemplate.questions = data.questions;
+                }
+                
+                return true;
+            } catch (e) {
+                console.error('Error loading template from URL:', e);
+                return false;
+            }
+        }
+
+        function parseSimpleQuestions(questionsParam) {
+            // Format: "Question 1|Question 2|Question 3"
+            // Each becomes a yes-no-na question with photo required on "No"
+            if (!questionsParam) return null;
+            
+            const questionTexts = questionsParam.split('|').filter(q => q.trim());
+            if (questionTexts.length === 0) return null;
+            
+            return questionTexts.map((text, idx) => ({
+                id: `q${idx + 1}`,
+                text: text.trim(),
+                type: "yes-no-na",
+                options: ["Yes", "No", "N/A"],
+                photoRequired: "conditional",
+                photoRequiredFor: ["No"]
+            }));
+        }
+
+        async function applyUrlParams() {
             const urlParams = getUrlParams();
             
-            // Only apply URL params if they exist and the field is currently empty or default
-            if (urlParams.projectNumber) {
-                const field = document.getElementById('projectNumber');
-                if (!field.value || field.value === '234602') {
-                    field.value = urlParams.projectNumber;
+            // Load template from URL if provided (takes priority)
+            if (urlParams.templateUrl) {
+                const loaded = await loadTemplateFromUrl(urlParams.templateUrl);
+                if (loaded) {
+                    console.log('Template loaded from URL');
                 }
+            }
+            
+            // Or parse simple questions from URL parameter
+            else if (urlParams.questions) {
+                const questions = parseSimpleQuestions(urlParams.questions);
+                if (questions) {
+                    inspectionTemplate.questions = questions;
+                    console.log(`Loaded ${questions.length} questions from URL`);
+                }
+            }
+            
+            // Apply project data parameters - URL takes priority over localStorage and defaults
+            if (urlParams.projectNumber) {
+                document.getElementById('projectNumber').value = urlParams.projectNumber;
             }
             
             if (urlParams.projectAddress) {
-                const field = document.getElementById('projectAddress');
-                if (!field.value || field.value === '19 Millwell Road') {
-                    field.value = urlParams.projectAddress;
-                }
+                document.getElementById('projectAddress').value = urlParams.projectAddress;
             }
             
             if (urlParams.inspectorName) {
-                const field = document.getElementById('inspectorName');
-                if (!field.value || field.value === 'Daniel Kenna') {
-                    field.value = urlParams.inspectorName;
-                }
+                document.getElementById('inspectorName').value = urlParams.inspectorName;
             }
             
             if (urlParams.inspectionPurpose) {
-                const field = document.getElementById('inspectionPurpose');
-                if (!field.value) {
-                    field.value = urlParams.inspectionPurpose;
-                }
+                document.getElementById('inspectionPurpose').value = urlParams.inspectionPurpose;
             }
             
             if (urlParams.inspectionDate) {
-                const field = document.getElementById('inspectionDate');
                 // Validate date format (YYYY-MM-DD)
                 if (/^\d{4}-\d{2}-\d{2}$/.test(urlParams.inspectionDate)) {
-                    if (!field.value) {
-                        field.value = urlParams.inspectionDate;
-                    }
+                    document.getElementById('inspectionDate').value = urlParams.inspectionDate;
                 }
             }
         }
 
         // ===== INITIALIZATION =====
-        function init() {
+        async function init() {
             loadData();
-            applyUrlParams(); // Check for URL parameters after loading saved data
+            await applyUrlParams(); // Check for URL parameters after loading saved data
             setTodayDate();
+            renderQuestions();
             renderFreeFormItems();
             updateStats();
+            setupPhotoInput();
             setupFreeFormPhotoInput();
             setupProjectDataSave();
         }
 
         function loadData() {
             try {
+                responses = JSON.parse(localStorage.getItem(storageKeys.responses)) || {};
+                photos = JSON.parse(localStorage.getItem(storageKeys.photos)) || {};
+                notes = JSON.parse(localStorage.getItem(storageKeys.notes)) || {};
                 freeFormItems = JSON.parse(localStorage.getItem(storageKeys.freeFormItems)) || [];
                 
                 const savedProjectData = JSON.parse(localStorage.getItem(storageKeys.projectData));
@@ -1000,6 +1064,9 @@
 
         function saveData() {
             try {
+                localStorage.setItem(storageKeys.responses, JSON.stringify(responses));
+                localStorage.setItem(storageKeys.photos, JSON.stringify(photos));
+                localStorage.setItem(storageKeys.notes, JSON.stringify(notes));
                 localStorage.setItem(storageKeys.freeFormItems, JSON.stringify(freeFormItems));
                 saveProjectData();
             } catch (e) {
@@ -1034,6 +1101,235 @@
         }
 
         // ===== RENDER QUESTIONS =====
+        function renderQuestions() {
+            const container = document.getElementById('questionList');
+            container.innerHTML = '';
+
+            inspectionTemplate.questions.forEach((question, index) => {
+                const card = createQuestionCard(question, index + 1);
+                container.appendChild(card);
+            });
+        }
+
+        function createQuestionCard(question, number) {
+            const card = document.createElement('div');
+            card.className = 'question-card';
+            card.id = `question-${question.id}`;
+            
+            // Determine card status
+            const response = responses[question.id];
+            if (response) {
+                if (question.type === 'yes-no-na') {
+                    if (response === 'Yes') card.classList.add('completed');
+                    else if (response === 'No') card.classList.add('non-compliant');
+                    else if (response === 'N/A') card.classList.add('na');
+                } else if (question.type === 'multi-select') {
+                    if (response && response.length > 0) card.classList.add('completed');
+                }
+            }
+
+            const photoRequiredNow = isPhotoRequired(question, response);
+            const currentPhotos = photos[question.id] || [];
+            const photosMissing = photoRequiredNow && currentPhotos.length === 0;
+            const questionComment = notes[question.id] || '';
+
+            card.innerHTML = `
+                <div class="question-header">
+                    <div class="question-number">Q${number}</div>
+                    <div class="question-text">${question.text}</div>
+                </div>
+                <div class="question-controls">
+                    ${renderResponseControls(question)}
+                    ${photoRequiredNow ? '<div class="photo-required-badge">📸 Photo Required</div>' : ''}
+                    <div class="photo-section">
+                        <button class="add-photo-btn" onclick="openCamera('${question.id}')">
+                            <svg fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z"/>
+                                <path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/>
+                            </svg>
+                            Add Photo${currentPhotos.length > 0 ? 's' : ''} (${currentPhotos.length})
+                        </button>
+                        <div class="photo-grid" id="photoGrid-${question.id}">
+                            ${renderPhotoGrid(question.id)}
+                        </div>
+                    </div>
+                    <textarea 
+                        class="notes-input" 
+                        placeholder="Add comment (optional)..."
+                        onchange="saveNote('${question.id}', this.value)"
+                    >${questionComment}</textarea>
+                </div>
+            `;
+
+            return card;
+        }
+
+        function renderResponseControls(question) {
+            if (question.type === 'yes-no-na') {
+                const selectedResponse = responses[question.id];
+                return `
+                    <div class="response-buttons">
+                        ${question.options.map(option => `
+                            <button 
+                                class="response-btn ${option.toLowerCase()} ${selectedResponse === option ? 'selected' : ''}"
+                                onclick="selectResponse('${question.id}', '${option}', '${question.type}')"
+                            >
+                                ${option}
+                            </button>
+                        `).join('')}
+                    </div>
+                `;
+            } else if (question.type === 'multi-select') {
+                const selectedOptions = responses[question.id] || [];
+                return `
+                    <div class="multi-select-group">
+                        ${question.options.map((option, idx) => `
+                            <label class="multi-select-option ${selectedOptions.includes(option) ? 'selected' : ''}" 
+                                   id="option-${question.id}-${idx}">
+                                <input 
+                                    type="checkbox" 
+                                    ${selectedOptions.includes(option) ? 'checked' : ''}
+                                    onchange="toggleMultiSelect('${question.id}', '${option}', ${idx})"
+                                >
+                                ${option}
+                            </label>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            return '';
+        }
+
+        function renderPhotoGrid(questionId) {
+            const questionPhotos = photos[questionId] || [];
+            return questionPhotos.map((photoData, index) => `
+                <div class="photo-thumbnail">
+                    <img src="${photoData}" onclick="openPhotoModal('${photoData}')">
+                    <button class="remove-photo" onclick="removePhoto('${questionId}', ${index}, event)">×</button>
+                </div>
+            `).join('');
+        }
+
+        // ===== RESPONSE HANDLING =====
+        function selectResponse(questionId, response, type) {
+            responses[questionId] = response;
+            saveData();
+            
+            // Re-render the specific question card
+            const question = inspectionTemplate.questions.find(q => q.id === questionId);
+            const questionNumber = inspectionTemplate.questions.indexOf(question) + 1;
+            const card = createQuestionCard(question, questionNumber);
+            document.getElementById(`question-${questionId}`).replaceWith(card);
+            
+            updateStats();
+        }
+
+        function toggleMultiSelect(questionId, option, optionIndex) {
+            if (!responses[questionId]) {
+                responses[questionId] = [];
+            }
+            
+            const index = responses[questionId].indexOf(option);
+            if (index > -1) {
+                responses[questionId].splice(index, 1);
+            } else {
+                responses[questionId].push(option);
+            }
+            
+            saveData();
+            
+            // Toggle visual selection
+            const optionElement = document.getElementById(`option-${questionId}-${optionIndex}`);
+            optionElement.classList.toggle('selected');
+            
+            updateStats();
+        }
+
+        function saveNote(questionId, noteText) {
+            notes[questionId] = noteText;
+            saveData();
+        }
+
+        // ===== PHOTO HANDLING =====
+        let currentQuestionForPhoto = null;
+
+        function setupPhotoInput() {
+            document.getElementById('photoInput').addEventListener('change', handlePhotoCapture);
+        }
+
+        function openCamera(questionId) {
+            currentQuestionForPhoto = questionId;
+            document.getElementById('photoInput').click();
+        }
+
+        async function handlePhotoCapture(event) {
+            const files = event.target.files;
+            if (!files || files.length === 0 || !currentQuestionForPhoto) return;
+
+            showLoading('Processing photos...');
+
+            for (let file of files) {
+                const reader = new FileReader();
+                await new Promise((resolve) => {
+                    reader.onload = async function(e) {
+                        const originalData = e.target.result;
+                        
+                        // Compress image aggressively to maximize storage (800px max, 50% quality)
+                        const compressedData = await compressImage(originalData, 800, 0.5);
+                        
+                        if (!photos[currentQuestionForPhoto]) {
+                            photos[currentQuestionForPhoto] = [];
+                        }
+                        photos[currentQuestionForPhoto].push(compressedData);
+                        
+                        resolve();
+                    };
+                    reader.readAsDataURL(file);
+                });
+            }
+
+            saveData();
+            
+            // Update photo grid
+            const photoGrid = document.getElementById(`photoGrid-${currentQuestionForPhoto}`);
+            photoGrid.innerHTML = renderPhotoGrid(currentQuestionForPhoto);
+            
+            // Update the question card to reflect photo addition
+            const question = inspectionTemplate.questions.find(q => q.id === currentQuestionForPhoto);
+            const questionNumber = inspectionTemplate.questions.indexOf(question) + 1;
+            const card = createQuestionCard(question, questionNumber);
+            document.getElementById(`question-${currentQuestionForPhoto}`).replaceWith(card);
+            
+            updateStats();
+            hideLoading();
+
+            // Reset input
+            event.target.value = '';
+        }
+
+        function removePhoto(questionId, photoIndex, event) {
+            event.stopPropagation();
+            if (confirm('Remove this photo?')) {
+                photos[questionId].splice(photoIndex, 1);
+                if (photos[questionId].length === 0) {
+                    delete photos[questionId];
+                }
+                saveData();
+                
+                // Update photo grid
+                const photoGrid = document.getElementById(`photoGrid-${questionId}`);
+                photoGrid.innerHTML = renderPhotoGrid(questionId);
+                
+                // Update the question card
+                const question = inspectionTemplate.questions.find(q => q.id === questionId);
+                const questionNumber = inspectionTemplate.questions.indexOf(question) + 1;
+                const card = createQuestionCard(question, questionNumber);
+                document.getElementById(`question-${questionId}`).replaceWith(card);
+                
+                updateStats();
+            }
+        }
+
         function openPhotoModal(photoData) {
             document.getElementById('modalImage').src = photoData;
             document.getElementById('photoModal').classList.add('active');
@@ -1041,6 +1337,19 @@
 
         function closePhotoModal() {
             document.getElementById('photoModal').classList.remove('active');
+        }
+
+        function isPhotoRequired(question, response) {
+            if (question.photoRequired === 'always') return true;
+            if (question.photoRequired === 'never') return false;
+            if (question.photoRequired === 'conditional') {
+                if (question.type === 'yes-no-na') {
+                    return question.photoRequiredFor.includes(response);
+                } else if (question.type === 'multi-select') {
+                    return response && response.length > 0;
+                }
+            }
+            return false;
         }
 
         // ===== FREE-FORM PHOTO CAPTURE =====
@@ -1366,15 +1675,86 @@
 
         // ===== STATISTICS =====
         function updateStats() {
-            const totalItems = freeFormItems.length;
-            const majorCount = freeFormItems.filter(i => i.category === 'Major Defect (Urgent)').length;
-            const moderateCount = freeFormItems.filter(i => i.category === 'Moderate Defect (Repair)').length;
-            const minorCount = freeFormItems.filter(i => i.category === 'Minor Defect (Monitor)').length;
+            const totalQuestions = inspectionTemplate.questions.length;
+            const hasQuestions = totalQuestions > 0;
+            
+            // Update UI visibility based on whether questions exist
+            const questionSection = document.getElementById('questionSection');
+            const progressContainer = document.getElementById('progressContainer');
+            const freeFormTitle = document.getElementById('freeFormTitle');
+            const freeFormDescription = document.getElementById('freeFormDescription');
+            const freeFormSection = document.getElementById('freeFormSection');
+            
+            if (hasQuestions) {
+                // Template mode - show questions section and progress
+                questionSection.style.display = 'block';
+                progressContainer.style.display = 'block';
+                freeFormSection.style.borderTop = '2px solid #e0e0e0';
+                freeFormTitle.textContent = 'Inspection Items';
+                freeFormDescription.textContent = 'Record defects and observations not covered in the checklist above.';
+                
+                // Show template stats
+                const completedQuestions = Object.keys(responses).filter(qId => {
+                    const response = responses[qId];
+                    return response && (typeof response === 'string' || (Array.isArray(response) && response.length > 0));
+                }).length;
+                
+                const templatePhotos = Object.values(photos).reduce((sum, photoArray) => sum + photoArray.length, 0);
+                const freeFormPhotos = freeFormItems.length;
+                const totalPhotos = templatePhotos + freeFormPhotos;
 
-            document.getElementById('statItems').textContent = totalItems;
-            document.getElementById('statMajor').textContent = majorCount;
-            document.getElementById('statModerate').textContent = moderateCount;
-            document.getElementById('statMinor').textContent = minorCount;
+                const progressPercent = totalQuestions > 0 ? Math.round((completedQuestions / totalQuestions) * 100) : 0;
+                document.getElementById('progressText').textContent = progressPercent + '%';
+                document.getElementById('progressBar').style.width = progressPercent + '%';
+                
+                // Template mode stats
+                document.getElementById('statsContainer').innerHTML = `
+                    <div class="stat">
+                        <div class="stat-number">${totalQuestions}</div>
+                        <div class="stat-label">Questions</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number">${completedQuestions}</div>
+                        <div class="stat-label">Completed</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number">${totalPhotos}</div>
+                        <div class="stat-label">Photos</div>
+                    </div>
+                `;
+            } else {
+                // Free-form mode - hide questions section and progress
+                questionSection.style.display = 'none';
+                progressContainer.style.display = 'none';
+                freeFormSection.style.borderTop = 'none';
+                freeFormTitle.textContent = 'Inspection Items';
+                freeFormDescription.textContent = 'Capture photos and document observations, defects, and compliance items.';
+                
+                // Free-form mode stats
+                const totalItems = freeFormItems.length;
+                const majorCount = freeFormItems.filter(i => i.category === 'Major Defect (Urgent)').length;
+                const moderateCount = freeFormItems.filter(i => i.category === 'Moderate Defect (Repair)').length;
+                const minorCount = freeFormItems.filter(i => i.category === 'Minor Defect (Monitor)').length;
+                
+                document.getElementById('statsContainer').innerHTML = `
+                    <div class="stat">
+                        <div class="stat-number">${totalItems}</div>
+                        <div class="stat-label">Items</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number" style="color: #f44336;">${majorCount}</div>
+                        <div class="stat-label">Major</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number" style="color: #ff9800;">${moderateCount}</div>
+                        <div class="stat-label">Moderate</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number" style="color: #2196F3;">${minorCount}</div>
+                        <div class="stat-label">Minor</div>
+                    </div>
+                `;
+            }
 
             // Update storage stats
             updateStorageStats();
@@ -1439,7 +1819,9 @@
 
                 // Header
                 pdf.setFillColor(45, 55, 72);
-                pdf.rect(0, 0, pageWidth, 55, 'F');
+                const hasQuestions = inspectionTemplate.questions.length > 0;
+                const headerHeight = hasQuestions ? 50 : 55;
+                pdf.rect(0, 0, pageWidth, headerHeight, 'F');
                 pdf.setTextColor(255, 255, 255);
                 pdf.setFontSize(20);
                 pdf.setFont(undefined, 'bold');
@@ -1461,7 +1843,7 @@
                     pdf.text(info, pageWidth / 2, 25 + (idx * 5), { align: 'center' });
                 });
 
-                yPos = 65;
+                yPos = headerHeight + 10;
 
                 // Summary
                 pdf.setTextColor(0, 0, 0);
@@ -1470,24 +1852,146 @@
                 pdf.text('Inspection Summary', margin, yPos);
                 yPos += 8;
 
-                const totalItems = freeFormItems.length;
-                const majorCount = freeFormItems.filter(i => i.category === 'Major Defect (Urgent)').length;
-                const moderateCount = freeFormItems.filter(i => i.category === 'Moderate Defect (Repair)').length;
-                const minorCount = freeFormItems.filter(i => i.category === 'Minor Defect (Monitor)').length;
-
                 pdf.setFontSize(10);
                 pdf.setFont(undefined, 'normal');
-                pdf.text(`Total Items: ${totalItems}`, margin, yPos);
-                yPos += 5;
-                pdf.text(`Major Defects: ${majorCount}`, margin, yPos);
-                yPos += 5;
-                pdf.text(`Moderate Defects: ${moderateCount}`, margin, yPos);
-                yPos += 5;
-                pdf.text(`Minor Defects: ${minorCount}`, margin, yPos);
-                yPos += 10;
+                
+                if (hasQuestions) {
+                    // Template mode summary
+                    const totalQuestions = inspectionTemplate.questions.length;
+                    const completedQuestions = Object.keys(responses).length;
+                    const templatePhotos = Object.values(photos).reduce((sum, arr) => sum + arr.length, 0);
+                    const totalPhotos = templatePhotos + freeFormItems.length;
+
+                    pdf.text(`Total Checklist Questions: ${totalQuestions}`, margin, yPos);
+                    yPos += 5;
+                    pdf.text(`Completed: ${completedQuestions}`, margin, yPos);
+                    yPos += 5;
+                    pdf.text(`Inspection Items: ${freeFormItems.length}`, margin, yPos);
+                    yPos += 5;
+                    pdf.text(`Total Photos: ${totalPhotos}`, margin, yPos);
+                    yPos += 10;
+                } else {
+                    // Free-form mode summary
+                    const totalItems = freeFormItems.length;
+                    const majorCount = freeFormItems.filter(i => i.category === 'Major Defect (Urgent)').length;
+                    const moderateCount = freeFormItems.filter(i => i.category === 'Moderate Defect (Repair)').length;
+                    const minorCount = freeFormItems.filter(i => i.category === 'Minor Defect (Monitor)').length;
+
+                    pdf.text(`Total Items: ${totalItems}`, margin, yPos);
+                    yPos += 5;
+                    pdf.text(`Major Defects: ${majorCount}`, margin, yPos);
+                    yPos += 5;
+                    pdf.text(`Moderate Defects: ${moderateCount}`, margin, yPos);
+                    yPos += 5;
+                    pdf.text(`Minor Defects: ${minorCount}`, margin, yPos);
+                    yPos += 10;
+                }
+
+                // Checklist Questions Section (only if questions exist)
+                if (hasQuestions) {
+                    pdf.setFontSize(14);
+                    pdf.setFont(undefined, 'bold');
+                    pdf.text('Inspection Checklist', margin, yPos);
+                    yPos += 8;
+
+                    for (let i = 0; i < inspectionTemplate.questions.length; i++) {
+                        const question = inspectionTemplate.questions[i];
+                        const response = responses[question.id];
+                        const questionPhotos = photos[question.id] || [];
+                    const questionNotes = notes[question.id] || '';
+
+                    // Calculate height needed for this question
+                    let questionHeight = 20;
+                    if (questionNotes) questionHeight += 15;
+                    if (questionPhotos.length > 0) questionHeight += 50; // Space for photos
+
+                    // Check if we need a new page
+                    if (yPos + questionHeight > pageHeight - margin) {
+                        pdf.addPage();
+                        yPos = margin;
+                    }
+
+                    // Question box background
+                    pdf.setFillColor(248, 249, 250);
+                    pdf.rect(margin, yPos, contentWidth, questionHeight, 'F');
+
+                    // Question number and text
+                    pdf.setFontSize(11);
+                    pdf.setFont(undefined, 'bold');
+                    pdf.setTextColor(0, 0, 0);
+                    const questionText = `Q${i + 1}: ${question.text}`;
+                    const textLines = pdf.splitTextToSize(questionText, contentWidth - 6);
+                    pdf.text(textLines, margin + 3, yPos + 6);
+                    yPos += 6 + (textLines.length * 5);
+
+                    // Response
+                    pdf.setFontSize(10);
+                    pdf.setFont(undefined, 'normal');
+                    let responseText = 'No response';
+                    if (response) {
+                        if (Array.isArray(response)) {
+                            responseText = response.join(', ');
+                        } else {
+                            responseText = response;
+                        }
+                    }
+                    pdf.text(`Response: ${responseText}`, margin + 3, yPos + 3);
+                    yPos += 7;
+
+                    // Notes
+                    if (questionNotes) {
+                        pdf.setFontSize(9);
+                        pdf.setFont(undefined, 'italic');
+                        const noteLines = pdf.splitTextToSize(`Notes: ${questionNotes}`, contentWidth - 6);
+                        pdf.text(noteLines, margin + 3, yPos + 3);
+                        yPos += noteLines.length * 4 + 3;
+                    }
+
+                    // Photos - actually embed them
+                    if (questionPhotos.length > 0) {
+                        yPos += 3;
+                        const photoWidth = 40;
+                        const photoHeight = 40;
+                        const photosPerRow = Math.floor(contentWidth / (photoWidth + 5));
+                        
+                        for (let p = 0; p < questionPhotos.length; p++) {
+                            const col = p % photosPerRow;
+                            const row = Math.floor(p / photosPerRow);
+                            const xPos = margin + 3 + (col * (photoWidth + 5));
+                            const photoYPos = yPos + (row * (photoHeight + 5));
+
+                            // Check if we need a new page for photos
+                            if (photoYPos + photoHeight > pageHeight - margin) {
+                                pdf.addPage();
+                                yPos = margin;
+                            }
+
+                            try {
+                                pdf.addImage(questionPhotos[p], 'JPEG', xPos, photoYPos, photoWidth, photoHeight);
+                            } catch (e) {
+                                console.error('Error adding image:', e);
+                            }
+                        }
+                        
+                        const numRows = Math.ceil(questionPhotos.length / photosPerRow);
+                        yPos += numRows * (photoHeight + 5);
+                    }
+
+                    yPos += 8;
+                }
+                }
 
                 // Inspection Items Section
                 if (freeFormItems.length > 0) {
+                    // Check if we need a new page
+                    if (yPos > pageHeight - 100) {
+                        pdf.addPage();
+                        yPos = margin;
+                    }
+
+                    if (hasQuestions) {
+                        yPos += 5;
+                    }
                     pdf.setFontSize(14);
                     pdf.setFont(undefined, 'bold');
                     pdf.text('Inspection Items', margin, yPos);
@@ -1680,19 +2184,20 @@
 
         // ===== CLEAR DATA =====
         function clearAll() {
-            if (confirm('This will delete all inspection items and photos. Are you sure?')) {
+            if (confirm('This will delete all responses, photos, notes, and observations. Are you sure?')) {
+                responses = {};
+                photos = {};
+                notes = {};
                 freeFormItems = [];
                 
+                localStorage.removeItem(storageKeys.responses);
+                localStorage.removeItem(storageKeys.photos);
+                localStorage.removeItem(storageKeys.notes);
                 localStorage.removeItem(storageKeys.freeFormItems);
                 
+                renderQuestions();
                 renderFreeFormItems();
                 updateStats();
-                
-                // Clear map markers
-                if (map && markers.length > 0) {
-                    markers.forEach(marker => map.removeLayer(marker));
-                    markers = [];
-                }
                 
                 showToast('All data cleared');
             }
